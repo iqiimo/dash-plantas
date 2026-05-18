@@ -141,8 +141,8 @@ footer{border-top:1px solid var(--border);padding:14px 28px;display:flex;justify
   <div class="logo-block">
     <img id="headerLogo" src="" style="height:56px;width:auto;object-fit:contain;max-width:180px;" alt="Logo">
     <div>
-      <div class="logo-text">SKARTON</div>
-      <div class="logo-sub">Dashboard Operativo Multiplanta</div>
+      <div class="logo-text" id="headerPlantName" style="color:#f0c000;">SKARTON</div>
+      <div class="logo-sub" id="headerPlantSub">Dashboard Operativo Multiplanta</div>
     </div>
   </div>
   <div class="header-right">
@@ -463,9 +463,13 @@ async function loadData() {
     document.getElementById('mainContent').style.display = 'block';
     document.getElementById('periodoBanner').style.display = 'flex';
     document.getElementById('lastUpdate').textContent = `ACTUALIZADO ${hoy.toLocaleTimeString('es-MX')}`;
-    // Update header logo
+    // Update header logo and name
     const logoEl = document.getElementById('headerLogo');
     if (logoEl && LOGOS[planta]) logoEl.src = LOGOS[planta].src;
+    const nameEl = document.getElementById('headerPlantName');
+    if (nameEl) nameEl.textContent = planta === 'Tolcayuca' ? 'SKARTON' : planta === 'Glama' ? 'GLAMA' : 'DESA';
+    const subEl = document.getElementById('headerPlantSub');
+    if (subEl) subEl.textContent = planta === 'Tolcayuca' ? 'Planta Tolcayuca' : planta === 'Glama' ? 'Productos Glama S.A. de C.V.' : 'DESA';
     document.getElementById('footerTs').textContent = `FETCH: ${hoy.toLocaleString('es-MX')}`;
     applyFilters();
   } catch(e) {
@@ -479,9 +483,13 @@ async function loadData() {
 // ── FILTERS ───────────────────────────────────────────────────────────────────
 function applyFilters() {
   const planta = document.getElementById('filterPlanta').value;
-  // Update header logo on planta change
+  // Update header logo and name on planta change
   const logoEl = document.getElementById('headerLogo');
   if (logoEl && LOGOS[planta]) logoEl.src = LOGOS[planta].src;
+  const nameEl = document.getElementById('headerPlantName');
+  if (nameEl) nameEl.textContent = planta === 'Tolcayuca' ? 'SKARTON' : planta === 'Glama' ? 'GLAMA' : 'DESA';
+  const subEl = document.getElementById('headerPlantSub');
+  if (subEl) subEl.textContent = planta === 'Tolcayuca' ? 'Planta Tolcayuca' : planta === 'Glama' ? 'Productos Glama S.A. de C.V.' : 'DESA';
   const anio   = parseInt(document.getElementById('filterAnio').value);
   const mes    = parseInt(document.getElementById('filterMes').value);
 
