@@ -201,13 +201,59 @@ footer{border-top:1px solid var(--border);padding:14px 28px;display:flex;justify
 
 <main id="mainContent">
   <div class="tab-bar">
+    <button class="tab-btn" onclick="switchTab('todas')">🏭 Todas las Plantas</button>
     <button class="tab-btn active" onclick="switchTab('produccion')">📦 Producción</button>
     <button class="tab-btn" onclick="switchTab('merma')">♻️ Merma</button>
     <button class="tab-btn" onclick="switchTab('devoluciones')">↩️ Devoluciones</button>
     <button class="tab-btn" onclick="switchTab('diario')">📅 Detalle Diario</button>
   </div>
 
-  <!-- TAB PRODUCCIÓN -->
+  <!-- TAB TODAS -->
+  <div id="tab-todas" class="tab-panel">
+    <div class="section-title">Resumen Consolidado — Todas las Plantas</div>
+    <div class="kpi-grid" id="kpiTodas"></div>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Tons Embarcadas por Planta — Acumulado mes <span class="chart-tag">BARRAS</span></div>
+        <canvas id="chartTodasTons"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">% Merma por Planta <span class="chart-tag">DONA</span></div>
+        <canvas id="chartTodasMerma"></canvas>
+      </div>
+    </div>
+    <div class="charts-grid-2">
+      <div class="chart-card">
+        <div class="chart-title">m² Producidos por Planta <span class="chart-tag">BARRAS</span></div>
+        <canvas id="chartTodasM2"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Participación en Tons Embarcadas <span class="chart-tag">DONA</span></div>
+        <canvas id="chartTodasPart"></canvas>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header">Detalle por Planta</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th>Planta</th>
+            <th>Tons Embarcadas</th>
+            <th>Tons Producidas</th>
+            <th>m² Producidos</th>
+            <th>Merma Trim (kg)</th>
+            <th>Merma Proc (kg)</th>
+            <th>% Merma Trim</th>
+            <th>% Merma Proc</th>
+            <th>Días Productivos</th>
+          </tr></thead>
+          <tbody id="tablaTodasPlantas"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+    <!-- TAB PRODUCCIÓN -->
   <div id="tab-produccion" class="tab-panel active">
     <div class="section-title">KPIs del Período</div>
     <div class="kpi-grid" id="kpiGrid"></div>
@@ -552,6 +598,7 @@ function chartBase(unit='') {
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll(ctx) {
+  renderTodas(ctx);
   renderKPIs(ctx);
   renderComp(ctx);
   renderChartAcum(ctx);
@@ -568,6 +615,152 @@ function renderAll(ctx) {
   renderCompDevol(ctx);
   renderTablaDevol(ctx);
   renderTablaProduccion(ctx);
+}
+
+
+// ── RENDER TODAS LAS PLANTAS ──────────────────────────────────────────────────
+function renderTodas({ mes, anio, corte }) {
+  const plantas = ['Tolcayuca', 'Glama', 'Desa'];
+  const colors  = ['#0066cc', '#00cc88', '#ff6b35'];
+
+  const getData = planta => rawDiarios.filter(r =>
+    (r.planta === planta || (!r.planta && planta === 'Tolcayuca')) &&
+    r.anio === anio && r.mes === mes && r.dia <= corte
+  );
+
+  const stats = plantas.map(p => {
+    const d = getData(p);
+    const tonEmb   = sum(d, 'tonEmb');
+    const tonProd  = sum(d, 'tonProd');
+    const m2       = sum(d, 'm2');
+    const mTrim    = sum(d, 'mermaTrim');
+    const mProc    = sum(d, 'mermaProc');
+    const diasProd = d.filter(r => r.tonProd > 0).length;
+    const pctTrim  = tonProd > 0 ? mTrim / tonProd * 100 : 0;
+    const pctProc  = tonProd > 0 ? mProc / tonProd * 100 : 0;
+    return { planta: p, tonEmb, tonProd, m2, mTrim, mProc, pctTrim, pctProc, diasProd };
+  });
+
+  const total = {
+    tonEmb:  stats.reduce((a,s)=>a+s.tonEmb,0),
+    tonProd: stats.reduce((a,s)=>a+s.tonProd,0),
+    m2:      stats.reduce((a,s)=>a+s.m2,0),
+    mTrim:   stats.reduce((a,s)=>a+s.mTrim,0),
+    mProc:   stats.reduce((a,s)=>a+s.mProc,0),
+  };
+  total.pctTrim = total.tonProd > 0 ? total.mTrim / total.tonProd * 100 : 0;
+  total.pctProc = total.tonProd > 0 ? total.mProc / total.tonProd * 100 : 0;
+
+  // KPIs totalizados
+  document.getElementById('kpiTodas').innerHTML = `
+    <div class="kpi-card blue">
+      <div class="kpi-label">Tons Embarcadas — TOTAL</div>
+      <div class="kpi-value">${fmt(total.tonEmb)}</div>
+      <div class="kpi-unit">kg acumulados todas las plantas</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Tons Producidas — TOTAL</div>
+      <div class="kpi-value">${fmt(total.tonProd)}</div>
+      <div class="kpi-unit">kg producidos todas las plantas</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">m² Producidos — TOTAL</div>
+      <div class="kpi-value">${fmt(total.m2, 0)}</div>
+      <div class="kpi-unit">m² todas las plantas</div>
+    </div>
+    <div class="kpi-card ${total.pctTrim<=3.5?'':'danger'}">
+      <div class="kpi-label">% Merma Trim — TOTAL</div>
+      <div class="kpi-value">${fmt(total.pctTrim,2)}</div>
+      <div class="kpi-unit">% vs meta 3.5%</div>
+      <div class="progress-track"><div class="progress-fill ${total.pctTrim<=3.5?'':'danger'}" style="width:${Math.min(total.pctTrim/3.5*100,150)}%"></div></div>
+    </div>
+    <div class="kpi-card ${total.pctProc<=10.5?'':'danger'}">
+      <div class="kpi-label">% Merma Proceso — TOTAL</div>
+      <div class="kpi-value">${fmt(total.pctProc,2)}</div>
+      <div class="kpi-unit">% vs meta 10.5%</div>
+      <div class="progress-track"><div class="progress-fill ${total.pctProc<=10.5?'':'danger'}" style="width:${Math.min(total.pctProc/10.5*100,150)}%"></div></div>
+    </div>`;
+
+  // Chart tons por planta
+  destroyChart('chartTodasTons');
+  CHARTS.chartTodasTons = new Chart(document.getElementById('chartTodasTons'), {
+    type: 'bar',
+    data: {
+      labels: plantas,
+      datasets: [{
+        label: 'Tons Embarcadas',
+        data: stats.map(s => s.tonEmb),
+        backgroundColor: colors.map(c => c + 'bb'),
+        borderColor: colors, borderWidth: 2
+      }]
+    },
+    options: chartBase('kg')
+  });
+
+  // Chart merma pct por planta
+  destroyChart('chartTodasMerma');
+  CHARTS.chartTodasMerma = new Chart(document.getElementById('chartTodasMerma'), {
+    type: 'bar',
+    data: {
+      labels: plantas,
+      datasets: [
+        { label: '% Trim',    data: stats.map(s=>s.pctTrim), backgroundColor: 'rgba(255,107,53,0.7)', borderColor:'#ff6b35', borderWidth:2 },
+        { label: '% Proceso', data: stats.map(s=>s.pctProc), backgroundColor: 'rgba(214,48,49,0.5)',  borderColor:'#d63031', borderWidth:2 },
+        { label: 'Meta Trim 3.5%',  data: plantas.map(()=>3.5),  type:'line', borderColor:'#ff6b35', borderDash:[5,5], pointRadius:0, borderWidth:1.5 },
+        { label: 'Meta Proc 10.5%', data: plantas.map(()=>10.5), type:'line', borderColor:'#d63031', borderDash:[5,5], pointRadius:0, borderWidth:1.5 }
+      ]
+    },
+    options: chartBase('%')
+  });
+
+  // Chart m2 por planta
+  destroyChart('chartTodasM2');
+  CHARTS.chartTodasM2 = new Chart(document.getElementById('chartTodasM2'), {
+    type: 'bar',
+    data: {
+      labels: plantas,
+      datasets: [{ label: 'm²', data: stats.map(s=>s.m2), backgroundColor: colors.map(c=>c+'bb'), borderColor: colors, borderWidth:2 }]
+    },
+    options: chartBase('m²')
+  });
+
+  // Chart participación dona
+  destroyChart('chartTodasPart');
+  CHARTS.chartTodasPart = new Chart(document.getElementById('chartTodasPart'), {
+    type: 'doughnut',
+    data: {
+      labels: plantas,
+      datasets: [{ data: stats.map(s=>s.tonEmb), backgroundColor: colors, borderColor:'#ffffff', borderWidth:2 }]
+    },
+    options: { responsive:true, plugins:{ legend:{ position:'bottom', labels:{ color:'#4a5568', font:{family:'IBM Plex Mono',size:10}, boxWidth:12 } } } }
+  });
+
+  // Tabla detalle
+  const chipM = (val, meta) => val<=meta ? 'chip-ok' : val<=meta*1.2 ? 'chip-warn' : 'chip-bad';
+  document.getElementById('tablaTodasPlantas').innerHTML = [
+    ...stats.map(s => `<tr>
+      <td class="hl" style="font-weight:700;">${s.planta}</td>
+      <td class="acc">${fmt(s.tonEmb)}</td>
+      <td>${fmt(s.tonProd)}</td>
+      <td>${fmt(s.m2,0)}</td>
+      <td>${fmt(s.mTrim,0)}</td>
+      <td>${fmt(s.mProc,0)}</td>
+      <td><span class="chip ${chipM(s.pctTrim,3.5)}">${fmt(s.pctTrim,2)}%</span></td>
+      <td><span class="chip ${chipM(s.pctProc,10.5)}">${fmt(s.pctProc,2)}%</span></td>
+      <td>${s.diasProd}</td>
+    </tr>`),
+    `<tr style="border-top:2px solid var(--border);background:var(--surface2);">
+      <td class="hl" style="font-weight:800;color:var(--accent3);">TOTAL</td>
+      <td class="acc" style="font-weight:700;">${fmt(total.tonEmb)}</td>
+      <td style="font-weight:700;">${fmt(total.tonProd)}</td>
+      <td style="font-weight:700;">${fmt(total.m2,0)}</td>
+      <td style="font-weight:700;">${fmt(total.mTrim,0)}</td>
+      <td style="font-weight:700;">${fmt(total.mProc,0)}</td>
+      <td><span class="chip ${chipM(total.pctTrim,3.5)}">${fmt(total.pctTrim,2)}%</span></td>
+      <td><span class="chip ${chipM(total.pctProc,10.5)}">${fmt(total.pctProc,2)}%</span></td>
+      <td>—</td>
+    </tr>`
+  ].join('');
 }
 
 // ── KPIs PRODUCCIÓN ───────────────────────────────────────────────────────────
@@ -1052,7 +1245,7 @@ function renderTablaProduccion({ dActual }) {
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
 function switchTab(name) {
-  const tabs=['produccion','merma','devoluciones','diario'];
+  const tabs=['todas','produccion','merma','devoluciones','diario'];
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',tabs[i]===name));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===`tab-${name}`));
 }
