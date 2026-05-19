@@ -418,17 +418,28 @@ function splitLine(line) {
 // ── DATE PARSE ────────────────────────────────────────────────────────────────
 function parseDate(v) {
   if (!v) return null;
-  // Google Sheets CSV: M/D/YYYY
   const s = String(v).trim();
   const p = s.split('/');
   if (p.length === 3) {
     let [a, b, c] = p.map(Number);
-    // M/D/YYYY
-    let d = new Date(c, a-1, b);
-    if (!isNaN(d.getTime()) && a <= 12) return d;
-    // D/M/YYYY fallback
-    d = new Date(c, b-1, a);
-    if (!isNaN(d.getTime())) return d;
+    const year = c > 100 ? c : 2000 + c;
+    // If first part > 12 → must be DD/MM/YYYY (day can't be a month)
+    if (a > 12) {
+      const d = new Date(year, b-1, a);
+      if (!isNaN(d.getTime())) return d;
+    }
+    // If second part > 12 → must be MM/DD/YYYY
+    if (b > 12) {
+      const d = new Date(year, a-1, b);
+      if (!isNaN(d.getTime())) return d;
+    }
+    // Both <= 12: ambiguous. 
+    // Google Sheets CSV exports dates as M/D/YYYY BUT
+    // Mexican date format in Sheets is DD/MM/YYYY
+    // Check: if we're getting months > 12 with M/D parse, use DD/MM
+    // Try DD/MM/YYYY first (Mexican format - most likely for this app)
+    const ddmm = new Date(year, b-1, a); // DD/MM/YYYY
+    if (!isNaN(ddmm.getTime()) && b >= 1 && b <= 12 && a >= 1 && a <= 31) return ddmm;
   }
   return null;
 }
@@ -501,11 +512,13 @@ async function loadData() {
   try {
     const planta = document.getElementById('filterPlanta').value;
     const metaSheet = `METAS_${planta.toUpperCase()}`;
+    const metaKey = metaSheet in SHEET_GIDS ? metaSheet : 'METAS_TOLCAYUCA';
     const [tD, tDev, tM] = await Promise.all([
       fetchCSV('DATOS_DIARIOS'),
       fetchCSV('DEVOLUCIONES'),
-      fetchCSV(metaSheet in SHEET_GIDS ? metaSheet : 'METAS_TOLCAYUCA')
+      fetchCSV(metaKey)
     ]);
+    console.log(`Cargando metas de: ${metaKey} para planta: ${planta}`);
     rawDiarios      = parseDiarios(tD);
     rawDevoluciones = parseDevoluciones(tDev);
     rawMetas        = parseMetas(tM);
@@ -549,6 +562,12 @@ function applyFilters() {
   if (nameEl) nameEl.textContent = planta === 'Tolcayuca' ? 'SKARTON' : planta === 'Glama' ? 'GLAMA' : 'DESA';
   const subEl = document.getElementById('headerPlantSub');
   if (subEl) subEl.textContent = planta === 'Tolcayuca' ? 'Planta Tolcayuca' : planta === 'Glama' ? 'Productos Glama S.A. de C.V.' : 'DESA';
+  // Reload metas if planta changed
+  if (window._lastPlanta !== planta) {
+    window._lastPlanta = planta;
+    loadData();
+    return;
+  }
   const anio   = parseInt(document.getElementById('filterAnio').value);
   const mesVal = document.getElementById('filterMes').value;
   const mesAll = mesVal === 'all';
