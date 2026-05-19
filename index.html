@@ -164,6 +164,7 @@ footer{border-top:1px solid var(--border);padding:14px 28px;display:flex;justify
     <div class="filter-group">
       <span class="filter-label">MES</span>
       <select id="filterMes" onchange="applyFilters()">
+        <option value="all">Todos los meses</option>
         <option value="1">Enero</option><option value="2">Febrero</option>
         <option value="3">Marzo</option><option value="4">Abril</option>
         <option value="5">Mayo</option><option value="6">Junio</option>
@@ -245,6 +246,8 @@ footer{border-top:1px solid var(--border);padding:14px 28px;display:flex;justify
             <th>Merma Proc (kg)</th>
             <th>% Merma Trim</th>
             <th>% Merma Proc</th>
+            <th>Devol. (count)</th>
+            <th>Devol. (kg)</th>
             <th>Días Productivos</th>
           </tr></thead>
           <tbody id="tablaTodasPlantas"></tbody>
@@ -499,7 +502,7 @@ async function loadData() {
 
     // Set default filters to current month/year
     document.getElementById('filterAnio').value = anioActual;
-    document.getElementById('filterMes').value  = mesActual;
+    document.getElementById('filterMes').value  = mesActual.toString();
 
     if (!window._firstLoaded) {
       window._firstLoaded = true;
@@ -537,31 +540,43 @@ function applyFilters() {
   const subEl = document.getElementById('headerPlantSub');
   if (subEl) subEl.textContent = planta === 'Tolcayuca' ? 'Planta Tolcayuca' : planta === 'Glama' ? 'Productos Glama S.A. de C.V.' : 'DESA';
   const anio   = parseInt(document.getElementById('filterAnio').value);
-  const mes    = parseInt(document.getElementById('filterMes').value);
+  const mesVal = document.getElementById('filterMes').value;
+  const mesAll = mesVal === 'all';
+  const mes    = mesAll ? mesActual : parseInt(mesVal);
 
   // Corte: si es el mes/año actual → hasta hoy; si es pasado → hasta último día del mes
   const esActual = (anio === anioActual && mes === mesActual);
-  const corte    = esActual ? diaCorte : 31; // 31 atrapa todos los días
+  const corte    = esActual ? diaCorte : 31;
 
-  // Mes anterior
-  const mesPrevNum  = mes === 1 ? 12 : mes - 1;
-  const anioPrev    = mes === 1 ? anio - 1 : anio;
-  // Año anterior mismo mes
-  const anioAntNum  = anio - 1;
+  // Mes anterior y año anterior (para comparativos)
+  const mesPrevNum = mes === 1 ? 12 : mes - 1;
+  const anioPrev   = mes === 1 ? anio - 1 : anio;
+  const anioAntNum = anio - 1;
 
   // Update banner
-  document.getElementById('pBanner').textContent    = `${MESES[mes]} ${anio}`;
-  document.getElementById('pCorte').textContent     = `Día ${corte}${esActual?' (hoy)':''}`;
-  document.getElementById('pCompMes').textContent   = `${MESES[mesPrevNum]} ${anioPrev} (día ${corte})`;
-  document.getElementById('pCompAnio').textContent  = `${MESES[mes]} ${anioAntNum} (día ${corte})`;
+  document.getElementById('pBanner').textContent   = mesAll ? `Todo ${anio}` : `${MESES[mes]} ${anio}`;
+  document.getElementById('pCorte').textContent    = mesAll ? `Año completo` : `Día ${corte}${esActual?' (hoy)':''}`;
+  document.getElementById('pCompMes').textContent  = mesAll ? `${anio-1} completo` : `${MESES[mesPrevNum]} ${anioPrev} (día ${corte})`;
+  document.getElementById('pCompAnio').textContent = mesAll ? `—` : `${MESES[mes]} ${anioAntNum} (día ${corte})`;
 
   // Filter datasets
   const filtro = r => r.planta === planta || !r.planta;
 
-  const dActual   = rawDiarios.filter(r => filtro(r) && r.anio===anio   && r.mes===mes        && r.dia<=corte);
-  const dMesPrev  = rawDiarios.filter(r => filtro(r) && r.anio===anioPrev && r.mes===mesPrevNum && r.dia<=corte);
-  const dAnioPrev = rawDiarios.filter(r => filtro(r) && r.anio===anioAntNum && r.mes===mes     && r.dia<=corte);
-  const devActual = rawDevoluciones.filter(r => filtro(r) && r.anio===anio && r.mes===mes && r.dia<=corte);
+  const dActual   = mesAll
+    ? rawDiarios.filter(r => filtro(r) && r.anio===anio)
+    : rawDiarios.filter(r => filtro(r) && r.anio===anio && r.mes===mes && r.dia<=corte);
+
+  const dMesPrev  = mesAll
+    ? rawDiarios.filter(r => filtro(r) && r.anio===anio-1)
+    : rawDiarios.filter(r => filtro(r) && r.anio===anioPrev && r.mes===mesPrevNum && r.dia<=corte);
+
+  const dAnioPrev = mesAll
+    ? []
+    : rawDiarios.filter(r => filtro(r) && r.anio===anioAntNum && r.mes===mes && r.dia<=corte);
+
+  const devActual = mesAll
+    ? rawDevoluciones.filter(r => filtro(r) && r.anio===anio)
+    : rawDevoluciones.filter(r => filtro(r) && r.anio===anio && r.mes===mes && r.dia<=corte);
 
   const meta = rawMetas.find(m => m.mes === mes) || { metaTons:0, metaM2:0, metaMerma:META_MERMA, diasLab:0 };
 
@@ -628,6 +643,33 @@ function renderTodas({ mes, anio, corte }) {
     r.anio === anio && r.mes === mes && r.dia <= corte
   );
 
+  // Devoluciones por planta
+  const getDevData = planta => {
+    const mesVal2 = document.getElementById('filterMes').value;
+    const mesAll2 = mesVal2 === 'all';
+    const mes2    = mesAll2 ? mesActual : parseInt(mesVal2);
+    const corte2  = (anio === anioActual && mes2 === mesActual) ? diaCorte : 31;
+    return rawDevoluciones.filter(r =>
+      (r.planta === planta || (!r.planta && planta === 'Tolcayuca')) &&
+      r.anio === anio &&
+      (mesAll2 || (r.mes === mes2 && r.dia <= corte2))
+    );
+  };
+
+  const devStats = plantas.map(p => {
+    const d = getDevData(p);
+    return {
+      planta: p,
+      count:  d.length,
+      piezas: sum(d, 'piezas'),
+      kilos:  sum(d, 'kilos')
+    };
+  });
+
+  const totalDevKg     = devStats.reduce((a,s)=>a+s.kilos,0);
+  const totalDevCount  = devStats.reduce((a,s)=>a+s.count,0);
+  const totalDevPiezas = devStats.reduce((a,s)=>a+s.piezas,0);
+
   const stats = plantas.map(p => {
     const d = getData(p);
     const tonEmb   = sum(d, 'tonEmb');
@@ -679,6 +721,12 @@ function renderTodas({ mes, anio, corte }) {
       <div class="kpi-value">${fmt(total.pctProc,2)}</div>
       <div class="kpi-unit">% vs meta 10.5%</div>
       <div class="progress-track"><div class="progress-fill ${total.pctProc<=10.5?'':'danger'}" style="width:${Math.min(total.pctProc/10.5*100,150)}%"></div></div>
+    </div>
+    <div class="kpi-card danger">
+      <div class="kpi-label">Kg Devoluciones — TOTAL</div>
+      <div class="kpi-value">${fmt(totalDevKg)}</div>
+      <div class="kpi-unit">kg devueltos todas las plantas</div>
+      <div class="kpi-meta neutral">${totalDevCount} devoluciones / ${totalDevPiezas} piezas</div>
     </div>`;
 
   // Chart tons por planta
@@ -738,7 +786,7 @@ function renderTodas({ mes, anio, corte }) {
   // Tabla detalle
   const chipM = (val, meta) => val<=meta ? 'chip-ok' : val<=meta*1.2 ? 'chip-warn' : 'chip-bad';
   document.getElementById('tablaTodasPlantas').innerHTML = [
-    ...stats.map(s => `<tr>
+    ...stats.map((s,i) => `<tr>
       <td class="hl" style="font-weight:700;">${s.planta}</td>
       <td class="acc">${fmt(s.tonEmb)}</td>
       <td>${fmt(s.tonProd)}</td>
@@ -747,6 +795,8 @@ function renderTodas({ mes, anio, corte }) {
       <td>${fmt(s.mProc,0)}</td>
       <td><span class="chip ${chipM(s.pctTrim,3.5)}">${fmt(s.pctTrim,2)}%</span></td>
       <td><span class="chip ${chipM(s.pctProc,10.5)}">${fmt(s.pctProc,2)}%</span></td>
+      <td class="dng">${devStats[i].count}</td>
+      <td class="wrn">${fmt(devStats[i].kilos,0)}</td>
       <td>${s.diasProd}</td>
     </tr>`),
     `<tr style="border-top:2px solid var(--border);background:var(--surface2);">
@@ -758,6 +808,8 @@ function renderTodas({ mes, anio, corte }) {
       <td style="font-weight:700;">${fmt(total.mProc,0)}</td>
       <td><span class="chip ${chipM(total.pctTrim,3.5)}">${fmt(total.pctTrim,2)}%</span></td>
       <td><span class="chip ${chipM(total.pctProc,10.5)}">${fmt(total.pctProc,2)}%</span></td>
+      <td class="dng" style="font-weight:700;">${totalDevCount}</td>
+      <td class="wrn" style="font-weight:700;">${fmt(totalDevKg,0)}</td>
       <td>—</td>
     </tr>`
   ].join('');
