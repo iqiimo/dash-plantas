@@ -233,6 +233,16 @@ footer{border-top:1px solid var(--border);padding:14px 28px;display:flex;justify
         <canvas id="chartTodasPart"></canvas>
       </div>
     </div>
+    <div class="chart-card" style="margin-bottom:22px;">
+      <div class="chart-title">
+        Pareto — Devoluciones por Departamento Responsable (Todas las Plantas)
+        <span class="chart-tag">PARETO</span>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:12px;">
+        📌 Regla 80/20 — La línea roja marca el acumulado. Los deptos a la izquierda del 80% son los vitales a atacar.
+      </div>
+      <canvas id="chartPareto" style="max-height:300px;"></canvas>
+    </div>
     <div class="table-card">
       <div class="table-header">Detalle por Planta</div>
       <div style="overflow-x:auto;">
@@ -633,6 +643,131 @@ function renderAll(ctx) {
 }
 
 
+
+// ── PARETO DEVOLUCIONES ───────────────────────────────────────────────────────
+function renderPareto(devStats, anio, mes) {
+  destroyChart('chartPareto');
+  const el = document.getElementById('chartPareto');
+  if (!el) return;
+
+  // Aggregate devoluciones by responsable across all plants
+  const mesVal = document.getElementById('filterMes').value;
+  const mesAll = mesVal === 'all';
+  const mesNum = mesAll ? mesActual : parseInt(mesVal);
+  const corte2 = (anio === anioActual && mesNum === mesActual) ? diaCorte : 31;
+
+  const allDevol = rawDevoluciones.filter(r =>
+    r.anio === anio && (mesAll || (r.mes === mesNum && r.dia <= corte2))
+  );
+
+  // Group by responsable
+  const byDepto = {};
+  allDevol.forEach(r => {
+    const k = r.responsable || 'Sin definir';
+    if (!byDepto[k]) byDepto[k] = { count: 0, piezas: 0, kilos: 0 };
+    byDepto[k].count++;
+    byDepto[k].piezas += r.piezas || 0;
+    byDepto[k].kilos  += r.kilos  || 0;
+  });
+
+  // Sort descending by count
+  const sorted = Object.entries(byDepto)
+    .sort((a,b) => b[1].count - a[1].count);
+
+  const labels  = sorted.map(e => e[0]);
+  const values  = sorted.map(e => e[1].count);
+  const total   = values.reduce((a,v) => a+v, 0);
+
+  // Cumulative %
+  let cum = 0;
+  const cumPct = values.map(v => {
+    cum += v;
+    return total > 0 ? parseFloat((cum/total*100).toFixed(1)) : 0;
+  });
+
+  // Colors - red for bars above 80% line contribution
+  let runSum = 0;
+  const barColors = values.map(v => {
+    runSum += v;
+    return (runSum/total) <= 0.8 ? 'rgba(214,48,49,0.8)' : 'rgba(180,180,180,0.5)';
+  });
+
+  CHARTS.chartPareto = new Chart(el, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Devoluciones',
+          data: values,
+          backgroundColor: barColors,
+          borderColor: barColors.map(c => c.replace('0.8','1').replace('0.5','0.8')),
+          borderWidth: 1,
+          yAxisID: 'y'
+        },
+        {
+          label: '% Acumulado',
+          data: cumPct,
+          type: 'line',
+          borderColor: '#0066cc',
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: '#0066cc',
+          tension: 0,
+          yAxisID: 'y2'
+        },
+        {
+          label: 'Línea 80%',
+          data: labels.map(() => 80),
+          type: 'line',
+          borderColor: '#ff4757',
+          borderWidth: 1.5,
+          borderDash: [6,4],
+          pointRadius: 0,
+          yAxisID: 'y2'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color:'#4a5568', font:{ family:'IBM Plex Mono', size:10 }, boxWidth:12 } },
+        tooltip: {
+          backgroundColor:'#ffffff', borderColor:'#dde1ea', borderWidth:1,
+          titleColor:'#1a1f2e', bodyColor:'#4a5568',
+          titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono', size:10 },
+          callbacks: {
+            afterBody: (items) => {
+              const idx = items[0]?.dataIndex;
+              if (idx === undefined) return '';
+              const s = sorted[idx][1];
+              return [`Piezas: ${s.piezas.toLocaleString('es-MX')}`, `Kilos: ${s.kilos.toFixed(1)}`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks:{ color:'#5a6070', font:{ family:'IBM Plex Mono', size:10 } }, grid:{ color:'rgba(180,190,210,0.3)' } },
+        y: {
+          position: 'left',
+          title: { display:true, text:'# Devoluciones', color:'#7a8299', font:{ family:'IBM Plex Mono', size:10 } },
+          ticks: { color:'#5a6070', font:{ family:'IBM Plex Mono', size:10 } },
+          grid: { color:'rgba(180,190,210,0.3)' }
+        },
+        y2: {
+          position: 'right',
+          min: 0, max: 100,
+          title: { display:true, text:'% Acumulado', color:'#0066cc', font:{ family:'IBM Plex Mono', size:10 } },
+          ticks: { color:'#0066cc', font:{ family:'IBM Plex Mono', size:10 }, callback: v => v+'%' },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+}
+
 // ── RENDER TODAS LAS PLANTAS ──────────────────────────────────────────────────
 function renderTodas({ mes, anio, corte }) {
   const plantas = ['Tolcayuca', 'Glama', 'Desa'];
@@ -782,6 +917,9 @@ function renderTodas({ mes, anio, corte }) {
     },
     options: { responsive:true, plugins:{ legend:{ position:'bottom', labels:{ color:'#4a5568', font:{family:'IBM Plex Mono',size:10}, boxWidth:12 } } } }
   });
+
+  // Pareto devoluciones
+  renderPareto(devStats, anio, mes);
 
   // Tabla detalle
   const chipM = (val, meta) => val<=meta ? 'chip-ok' : val<=meta*1.2 ? 'chip-warn' : 'chip-bad';
