@@ -423,23 +423,21 @@ function parseDate(v) {
   if (p.length === 3) {
     let [a, b, c] = p.map(Number);
     const year = c > 100 ? c : 2000 + c;
-    // If first part > 12 → must be DD/MM/YYYY (day can't be a month)
+
+    // If first part > 12 → MUST be DD/MM/YYYY
     if (a > 12) {
       const d = new Date(year, b-1, a);
       if (!isNaN(d.getTime())) return d;
     }
-    // If second part > 12 → must be MM/DD/YYYY
+    // If second part > 12 → MUST be MM/DD/YYYY (Google Sheets CSV)
     if (b > 12) {
       const d = new Date(year, a-1, b);
       if (!isNaN(d.getTime())) return d;
     }
-    // Both <= 12: ambiguous. 
-    // Google Sheets CSV exports dates as M/D/YYYY BUT
-    // Mexican date format in Sheets is DD/MM/YYYY
-    // Check: if we're getting months > 12 with M/D parse, use DD/MM
-    // Try DD/MM/YYYY first (Mexican format - most likely for this app)
-    const ddmm = new Date(year, b-1, a); // DD/MM/YYYY
-    if (!isNaN(ddmm.getTime()) && b >= 1 && b <= 12 && a >= 1 && a <= 31) return ddmm;
+    // Both <= 12: try M/D/YYYY first (Google Sheets CSV default export)
+    // then DD/MM/YYYY as fallback
+    const mdyyyy = new Date(year, a-1, b); // M/D/YYYY
+    if (!isNaN(mdyyyy.getTime())) return mdyyyy;
   }
   return null;
 }
