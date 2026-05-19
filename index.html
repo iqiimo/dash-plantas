@@ -651,13 +651,14 @@ function renderPareto(devStats, anio, mes) {
   if (!el) return;
 
   // Aggregate devoluciones by responsable across all plants
-  const mesVal = document.getElementById('filterMes').value;
-  const mesAll = mesVal === 'all';
-  const mesNum = mesAll ? mesActual : parseInt(mesVal);
-  const corte2 = (anio === anioActual && mesNum === mesActual) ? diaCorte : 31;
+  const mesValP = document.getElementById('filterMes').value;
+  const mesAllP = mesValP === 'all';
+  const mesNumP = mesAllP ? mesActual : parseInt(mesValP);
+  const corteP  = (anio === anioActual && mesNumP === mesActual) ? diaCorte : 31;
 
+  // Pareto toma TODAS las plantas sin filtro de planta
   const allDevol = rawDevoluciones.filter(r =>
-    r.anio === anio && (mesAll || (r.mes === mesNum && r.dia <= corte2))
+    r.anio === anio && (mesAllP || (r.mes === mesNumP && r.dia <= corteP))
   );
 
   // Group by responsable
@@ -773,23 +774,25 @@ function renderTodas({ mes, anio, corte }) {
   const plantas = ['Tolcayuca', 'Glama', 'Desa'];
   const colors  = ['#0066cc', '#00cc88', '#ff6b35'];
 
-  const getData = planta => rawDiarios.filter(r =>
-    (r.planta === planta || (!r.planta && planta === 'Tolcayuca')) &&
-    r.anio === anio && r.mes === mes && r.dia <= corte
-  );
+  const mesVal2 = document.getElementById('filterMes').value;
+  const mesAll2 = mesVal2 === 'all';
+  const mes2    = mesAll2 ? mesActual : parseInt(mesVal2);
+  const corte2  = (anio === anioActual && mes2 === mesActual) ? diaCorte : 31;
 
-  // Devoluciones por planta
-  const getDevData = planta => {
-    const mesVal2 = document.getElementById('filterMes').value;
-    const mesAll2 = mesVal2 === 'all';
-    const mes2    = mesAll2 ? mesActual : parseInt(mesVal2);
-    const corte2  = (anio === anioActual && mes2 === mesActual) ? diaCorte : 31;
-    return rawDevoluciones.filter(r =>
-      (r.planta === planta || (!r.planta && planta === 'Tolcayuca')) &&
-      r.anio === anio &&
-      (mesAll2 || (r.mes === mes2 && r.dia <= corte2))
-    );
-  };
+  const getData = planta => rawDiarios.filter(r => {
+    const plantaMatch = r.planta === planta || (!r.planta && planta === 'Tolcayuca');
+    const anioMatch   = r.anio === anio;
+    const mesMatch    = mesAll2 ? true : (r.mes === mes2 && r.dia <= corte2);
+    return plantaMatch && anioMatch && mesMatch;
+  });
+
+  // Devoluciones por planta - usa mismas vars mesAll2/mes2/corte2
+  const getDevData = planta => rawDevoluciones.filter(r => {
+    const plantaMatch = r.planta === planta || (!r.planta && planta === 'Tolcayuca');
+    const anioMatch   = r.anio === anio;
+    const mesMatch    = mesAll2 ? true : (r.mes === mes2 && r.dia <= corte2);
+    return plantaMatch && anioMatch && mesMatch;
+  });
 
   const devStats = plantas.map(p => {
     const d = getDevData(p);
